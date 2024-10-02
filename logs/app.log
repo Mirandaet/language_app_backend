@@ -1,0 +1,34 @@
+2024-10-01 15:47:32,353 - __main__ - INFO - Initializing MeloTTSGenerator
+2024-10-01 15:47:37,656 - __main__ - INFO - Ensuring required directories exist
+2024-10-01 15:47:37,656 - __main__ - INFO - Created or verified existence of 'public' directory
+2024-10-01 15:47:37,656 - __main__ - INFO - Created or verified existence of 'uploads' directory
+2024-10-01 15:47:37,656 - __main__ - INFO - Mounting static file directories
+2024-10-01 15:47:37,657 - __main__ - INFO - Adding CORS middleware
+2024-10-01 15:47:37,670 - __main__ - INFO - Starting FastAPI application
+2024-10-01 15:47:38,321 - __main__ - INFO - Received request to fetch languages
+2024-10-01 15:47:38,321 - __main__ - INFO - Current working directory: /home/miranda/melotest
+2024-10-01 15:47:38,321 - __main__ - INFO - Attempting to open file: /home/miranda/melotest/languages.json
+2024-10-01 15:47:38,331 - __main__ - INFO - Successfully fetched 2 languages
+2024-10-01 15:47:49,924 - __main__ - INFO - Received transcription request for file: recording.webm
+2024-10-01 15:47:49,924 - __main__ - INFO - File read successfully, size: 97117 bytes
+2024-10-02 09:56:37,276 - __main__ - INFO - Initializing MeloTTSGenerator
+2024-10-02 09:56:42,417 - __main__ - INFO - Ensuring required directories exist
+2024-10-02 09:56:42,417 - __main__ - INFO - Created or verified existence of 'public' directory
+2024-10-02 09:56:42,417 - __main__ - INFO - Created or verified existence of 'uploads' directory
+2024-10-02 09:56:42,417 - __main__ - INFO - Mounting static file directories
+2024-10-02 09:56:42,417 - __main__ - INFO - Adding CORS middleware
+2024-10-02 09:56:42,429 - __main__ - INFO - Starting FastAPI application
+2024-10-02 10:00:43,310 - __main__ - INFO - Initializing MeloTTSGenerator
+2024-10-02 10:00:48,340 - __main__ - INFO - Ensuring required directories exist
+2024-10-02 10:00:48,340 - __main__ - INFO - Created or verified existence of 'public' directory
+2024-10-02 10:00:48,340 - __main__ - INFO - Created or verified existence of 'uploads' directory
+2024-10-02 10:00:48,340 - __main__ - INFO - Mounting static file directories
+2024-10-02 10:00:48,341 - __main__ - INFO - Adding CORS middleware
+2024-10-02 10:00:48,354 - __main__ - INFO - Starting FastAPI application
+2024-10-02 11:02:36,977 - __main__ - INFO - Initializing MeloTTSGenerator
+2024-10-02 11:02:42,005 - __main__ - INFO - Ensuring required directories exist
+2024-10-02 11:02:42,005 - __main__ - INFO - Created or verified existence of 'public' directory
+2024-10-02 11:02:42,005 - __main__ - INFO - Created or verified existence of 'uploads' directory
+2024-10-02 11:02:42,005 - __main__ - INFO - Mounting static file directories
+2024-10-02 11:02:42,006 - __main__ - INFO - Adding CORS middleware
+2024-10-02 11:02:42,019 - __main__ - INFO - Starting FastAPI application

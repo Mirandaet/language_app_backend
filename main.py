@@ -21,9 +21,36 @@ import io
 from fastapi import HTTPException, Form
 import soundfile as sf
 
-# Configure logging
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+from logging.handlers import RotatingFileHandler
+
+# Get the directory of the current script
+current_dir = os.path.dirname(os.path.abspath(__file__))
+
+# Ensure the logs directory exists relative to the script location
+logs_dir = os.path.join(current_dir, 'logs')
+os.makedirs(logs_dir, exist_ok=True)
+
+# Set up logging
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+# Create handlers
+file_handler = RotatingFileHandler(
+    os.path.join(logs_dir, 'app.log'), 
+    maxBytes=10485760, 
+    backupCount=5
+)
+
+# Create formatters and add it to handlers
+log_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(log_format)
+
+# Add handlers to the logger
+logger.addHandler(file_handler)
+
+# Prevent the log messages from being propagated to the root logger
+logger.propagate = False
+
 
 # Suppress specific warnings
 warnings.filterwarnings("ignore", category=FutureWarning, module="huggingface_hub.file_download")
@@ -35,6 +62,9 @@ app = FastAPI()
 # Initialize MeloTTSGenerator
 logger.info("Initializing MeloTTSGenerator")
 tts_generator = MeloTTSGenerator()
+
+UPLOAD_DIR = "uploaded_audio"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # Ensure required directories exist
 logger.info("Ensuring required directories exist")
@@ -83,38 +113,50 @@ async def http_exception_handler(request, exc):
     )
 
 # Endpoints
+
 @app.post("/transcribe")
-async def transcribe(file: UploadFile = File(...)):
+async def transcribe(file: UploadFile = File(...), language: str = Form("EN")):
     logger.info(f"Received transcription request for file: {file.filename}")
     try:
-        # Read the file content directly into memory
-        audio_data = await file.read()
-        logger.info("File read successfully, starting transcription")
-        result = transcribe_audio(audio_data)
-        logger.info("Transcription completed successfully")
-        return {"result": result["text"]}
+        content = await file.read()
+        logger.info(f"File read successfully, size: {len(content)} bytes")
+        
+        # Determine the input format based on file extension
+        file_extension = os.path.splitext(file.filename)[1].lower()[1:]
+        if file_extension not in ['mp3', 'wav', 'webm']:
+            raise HTTPException(status_code=400, detail=f"Unsupported file format: {file_extension}")
+        
+        result = transcribe_audio(content, language=language, input_format=file_extension)
+        
+        if "error" in result:
+            logger.error(f"Transcription error: {result['error']}")
+            raise HTTPException(status_code=500, detail=result["error"])
+        
+        logger.info(f"Transcription completed successfully: {result['result']}")
+        return JSONResponse(content=result)
     except Exception as e:
         logger.error(f"An error occurred during transcription: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
-
-
+    
 @app.post("/tts")
 async def text_to_speech(
     text: str = Form(...),
     language: str = Form(...),
-    speaker_id: int = Form(None)  # New parameter for speaker ID
+    speaker_id: int = Form(None)
 ):
     logger.info(f"Received TTS request for text: '{text}' in language: {language}, speaker ID: {speaker_id}")
     try:
         logger.debug("Generating audio using MeloTTSGenerator")
         
-        # If speaker_id is None, it will use the default voice
-        audio = tts_generator.generate_audio(text, speaker_id=speaker_id)
+        # If speaker_id is None, use a default value or handle it appropriately
+        if speaker_id is None:
+            speaker_id = 0  # Or any default value that works with your TTS system
+        
+        audio = tts_generator.generate_audio(text, speaker_id)
         
         if audio is not None:
             logger.debug("Audio generated successfully, preparing response")
             buffer = io.BytesIO()
-            logger.debug(f"Writing audio to buffer with sampling rate: {tts_generator.sampling_rate}")
             sf.write(buffer, audio, tts_generator.sampling_rate, format='wav')
             buffer.seek(0)
             
@@ -139,30 +181,48 @@ async def get_available_voices():
         logger.error(f"An error occurred while fetching available voices: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/generate")
+app.post("/generate")
 async def generate(data: ChatHistory):
     logger.info("Received request to generate response")
-    logger.debug(f"Chat history length: {len(data.chat_history)}")
+    logger.debug(f"Chat history: {data.chat_history}")
     chat_history = ""
-    for message in data.chat_history:
-        chat_history += (message["role"] + ":" + message["message"])
-        chat_history += "\n"
-    logger.debug("Generating response")
-    response = generate_response(chat_history, data.language)
-    logger.info("Response generated successfully")
-    return response
-
+    try:
+        for message in data.chat_history:
+            chat_history += f"{message.role}:{message.content}\n"
+        
+        logger.debug("Generating response")
+        response = generate_response(chat_history, data.language)
+        logger.info("Response generated successfully")
+        return {"response": response}
+    except Exception as e:
+        logger.error(f"Error in generate endpoint: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to generate response: {str(e)}")
+    
 @app.get("/fetch_languages")
 async def fetch_languages():
     logger.info("Received request to fetch languages")
     try:
-        with open("languages.json", "r") as languages_file:
+        # Log the current working directory
+        logger.info(f"Current working directory: {os.getcwd()}")
+        
+        # Log the full path of the languages.json file
+        languages_file_path = os.path.join(os.getcwd(), "languages.json")
+        logger.info(f"Attempting to open file: {languages_file_path}")
+        
+        with open(languages_file_path, "r") as languages_file:
             languages = json.load(languages_file)
+        
         logger.info(f"Successfully fetched {len(languages)} languages")
         return languages
+    except FileNotFoundError as e:
+        logger.error(f"FileNotFoundError: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"languages.json file not found: {str(e)}")
+    except json.JSONDecodeError as e:
+        logger.error(f"JSONDecodeError: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Invalid JSON in languages.json: {str(e)}")
     except Exception as e:
-        logger.error(f"Error fetching languages: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to fetch languages")
+        logger.error(f"Unexpected error fetching languages: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to fetch languages: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

@@ -6,7 +6,7 @@ cwd = os.getcwd()
 tts_generator = meloTTS.MeloTTSGenerator()
 speakers = tts_generator.get_available_voices()
 
-for i in range(53,len(speakers)):
+for i in range(64,len(speakers)):
     audio = tts_generator.generate_audio("""I'll never forget my recent trip to the beachside town of Tulum. From the moment we arrived, I was struck by the
 crystal-clear waters and powdery white sand that seemed to stretch on forever. We spent our days lounging in beach
 chairs, taking leisurely strolls along the shoreline, and snorkeling in the calm Caribbean Sea. One afternoon, we
