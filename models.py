@@ -4,7 +4,7 @@ from typing import List
 
 class ChatMessage(BaseModel):
     role: str
-    content: str
+    message: str
 
 class ChatHistory(BaseModel):
     chat_history: List[ChatMessage]
