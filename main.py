@@ -9,7 +9,7 @@ from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from typing import List
 from conversation_handler import transcribe_audio, speak_text, generate_response
-from models import ChatHistory
+from models import GenerateRequest
 from meloTTS import MeloTTSGenerator
 import shutil
 import numpy as np
@@ -22,7 +22,11 @@ import io
 from fastapi import HTTPException, Form
 import soundfile as sf
 from logging.handlers import RotatingFileHandler
+from sqlalchemy.orm import Session
+from datetime import datetime
+from memory_manager import MemoryManager
 
+# Initialize the conversation handler
 
 logger = setup_logger()
 
@@ -69,6 +73,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Dependency to get DB session
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+memory_manager = MemoryManager(window_size=10)
+
 # Exception Handlers
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request, exc):
@@ -89,7 +103,7 @@ async def http_exception_handler(request, exc):
 # Endpoints
 
 @app.post("/transcribe")
-async def transcribe(file: UploadFile = File(...), language: str = Form("EN")):
+async def transcribe(file: UploadFile = File(...), language: str = Form("English")):
     logger.info(f"Received transcription request for file: {file.filename}")
     try:
         # Read the file content directly into memory
@@ -97,7 +111,7 @@ async def transcribe(file: UploadFile = File(...), language: str = Form("EN")):
         logger.info("File read successfully, starting transcription")
         result = transcribe_audio(audio_data, language=language)
         logger.info("Transcription completed successfully")
-        return {result["text"]}
+        return result["text"]
     except Exception as e:
         logger.error(f"An error occurred during transcription: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -114,9 +128,14 @@ async def text_to_speech(
         
         # If speaker_id is None, use a default value or handle it appropriately
         if speaker_id is None:
-            speaker_id = 0  # Or any default value that works with your TTS system
+            speaker_id = 1  # Or any default value that works with your TTS system
+
+        language_code = "EN"
+
+        with open("languages_desc.json", "r") as f:
+            language_code = json.load(f)[language][1].upper()
         
-        audio = tts_generator.generate_audio(text, speaker_id)
+        audio = tts_generator.generate_audio(text, speaker_id, language_code)
         
         if audio is not None:
             logger.debug("Audio generated successfully, preparing response")
@@ -145,22 +164,25 @@ async def get_available_voices():
         logger.error(f"An error occurred while fetching available voices: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/generate")
-async def generate(data: ChatHistory):
-    logger.info("Received request to generate response")
-    logger.debug(f"Chat history: {data.chat_history}")
-    chat_history = ""
+async def generate_chatbot_response(request: GenerateRequest):
+    logger.info(f"Received generate request for user {request.user_id}, conversation {request.conversation_id}")
     try:
-        for message in data.chat_history:
-            chat_history += f"{message.role}:{message.content}\n"
-        
-        logger.debug("Generating response")
-        response = generate_response(chat_history, data.language)
+        # Generate the response from the chatbot
+        chatbot_response = generate_response(
+            request.message, 
+            request.conversation_id, 
+            request.user_id, 
+            request.language
+        )
         logger.info("Response generated successfully")
-        return {"response": response}
+        return {"response": chatbot_response}
     except Exception as e:
-        logger.error(f"Error in generate endpoint: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to generate response: {str(e)}")
+        logger.error(f"An error occurred during response generation: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
     
 @app.get("/fetch_languages")
 async def fetch_languages():

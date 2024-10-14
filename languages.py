@@ -26,7 +26,24 @@ languages_desc = {"Japanese":["""You are speaking to someone in japanese, they w
     AI: I'm sorry to hear that. Have you been working hard lately?
     User: Yeah, I have. Can we switch to Japanese?
     Example of expected output: Japanese
-                 """,
+    
+    Example prompt:
+    User:   I'm lonely.
+    AI: I'm so sorry to hear that you're feeling lonely. Do you have any friends or family members that you can talk to when you're feeling down?
+    User: Yeah, yeah, I have some friends I could speak to.
+    AI: That's great! It's always helpful to have someone to share your thoughts and feelings with. What do you like to do with your friends when you get together? Do you like going out or staying in?
+    User: Could we switch to speaking in Japanese?
+    AI: Japanese
+    Example of expected output: Japanese
+                
+    Example prompt:
+    User: I'm so tired.
+    AI: I'm sorry to hear that. Have you been working hard lately?
+    User: Yeah, I have. Can we speak Japanese instead?
+    Example of expected output: Japanese      
+
+    MAKE SURE TO ONLY ANSWER WITH THE LANGUAGE THE USER WANTS TO SPEAK IN, IN ENGLISH, WHEN THEY ASK TO SWITCH LANGUAGES, DO AS THE EXAMPLE PROMPT SHOWS     
+                """,
     "en"]}
 
 
