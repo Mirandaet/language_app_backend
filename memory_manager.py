@@ -11,7 +11,7 @@ import threading
 logger = logging.getLogger(__name__)
 
 class MemoryManager:
-    def __init__(self, window_size=10, chunk_size=60, max_summaries=10):
+    def __init__(self, window_size=10, chunk_size=50, max_summaries=20):
         self.window_size = window_size
         self.chunk_size = chunk_size
         self.max_summaries = max_summaries
@@ -118,7 +118,7 @@ class MemoryManager:
         logger.debug(f"Retrieved all messages: {all_messages}")
 
 
-        # Get unsummarized messages
+        # Get unsummarized messagess
         unsummarized_messages = [msg for msg in all_messages if msg['id'] > last_summarized_id and not msg['is_summary']]
         
         logger.debug(f"Retrieved {len(unsummarized_messages)} unsummarized messages for user {user_id}, conversation {conversation_id}")
@@ -161,9 +161,11 @@ class MemoryManager:
             unsummarized_messages = [msg for msg in conversation_messages if msg['id'] > last_summarized_id]
             logger.debug(f"Retrieved {len(unsummarized_messages)} unsummarized messages")
         
-        if len(unsummarized_messages) >= self.chunk_size:
+        total_unsummarized = len(unsummarized_messages)
+
+        if total_unsummarized >= self.window_size + self.chunk_size:
             # Summarize all unsummarized messages
-            messages_to_summarize = unsummarized_messages
+            messages_to_summarize = unsummarized_messages[:total_unsummarized - self.window_size]
             
             summary, start_time, end_time = self.summarize_chunk(messages_to_summarize, user_id)
             self.add_message_to_store(summary, conversation_id, user_id, is_user_message=False, is_summary=True, 

@@ -17,7 +17,7 @@ def llama(prompt, system_prompt):
                 'content': prompt,
             }
         ],
-        model='llama3.2',
+        model='llama3',
     )
 
     return chat_completion.choices[0].message.content

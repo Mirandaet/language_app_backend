@@ -107,12 +107,10 @@ def generate_response(new_message, conversation_id, user_id, language="English")
     logger.debug(f"System prompt: {system_prompt}")
 
     # Retrieve all relevant messages within the current window
-
-    # First, add the new message to the conversation window
-
     window_messages = memory_manager.get_conversation_window(conversation_id, user_id)
     logger.debug(f"Retrieved {len(window_messages)} messages from the conversation window")
     
+    # Add the new message to the conversation window
     user_message_id = memory_manager.add_message_to_store(new_message, conversation_id, user_id, is_user_message=True)
     logger.debug(f"Added new user message with ID: {user_message_id}")
 
@@ -120,15 +118,20 @@ def generate_response(new_message, conversation_id, user_id, language="English")
     memory_manager.manage_conversation_window(conversation_id, user_id)
     logger.debug("Conversation window managed")
 
-    # Prepare context with proper classification
+    # Prepare context with proper classification and timestamps
     context = []
     for msg in window_messages:
+        timestamp = msg['timestamp']
         if msg['is_summary']:
             context.append(f"Summary ({msg['summary_start_time']} to {msg['summary_end_time']}): {msg['content']}")
         elif msg['is_user_message']:
-            context.append(f"User: {msg['content']}")
+            context.append(f"User ({timestamp}): {msg['content']}")
         else:
-            context.append(f"AI: {msg['content']}")
+            context.append(f"AI ({timestamp}): {msg['content']}")
+    
+    # Add the new user message with its timestamp
+    new_message_timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    context.append(f"User ({new_message_timestamp}): {new_message}")
     
     context_str = "\n".join(context)
     logger.debug(f"Context prepared for response generation: {context_str}")
@@ -137,7 +140,7 @@ def generate_response(new_message, conversation_id, user_id, language="English")
     logger.debug(f"First few context messages: {context[:3]}")
 
     logger.info("Calling LLama for response generation")
-    response = llama(system_prompt=system_prompt, prompt=f"Context:\n{context_str}\nUser: {new_message}\nAI:")
+    response = llama(system_prompt=system_prompt, prompt=f"Context:\n{context_str}\nAI:")
     # Clean the response if necessary
     response = response.strip()
     logger.info(f"Response generated: {response}")

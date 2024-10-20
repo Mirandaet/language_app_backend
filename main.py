@@ -125,15 +125,13 @@ async def text_to_speech(
     logger.info(f"Received TTS request for text: '{text}' in language: {language}, speaker ID: {speaker_id}")
     try:
         logger.debug("Generating audio using MeloTTSGenerator")
-        
-        # If speaker_id is None, use a default value or handle it appropriately
-        if speaker_id is None:
-            speaker_id = 1  # Or any default value that works with your TTS system
-
         language_code = "EN"
 
         with open("languages_desc.json", "r") as f:
-            language_code = json.load(f)[language][1].upper()
+            languages_data = json.load(f)
+            language_code = languages_data[language][1].upper()
+            if speaker_id is None:
+                speaker_id = languages_data[language][2]
         
         audio = tts_generator.generate_audio(text, speaker_id, language_code)
         
