@@ -23,6 +23,9 @@ import faiss
 import numpy as np
 from memory_manager import MemoryManager
 from datetime import datetime, timedelta
+from models import User, Conversation, Message
+from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -38,10 +41,6 @@ logger.info(f"FAISS index initialized with dimension {dimension}")
 
 # Store the messages alongside their conversation IDs and user IDs
 messages_store = []
-
-memory_manager = MemoryManager(window_size=10)
-logger.info(f"Memory manager initialized with window size 10. Instance ID: {id(memory_manager)}")
-
 def load_system_prompt(language):
     """Load the system prompt from the languages_desc.json file based on the language."""
     try:
@@ -97,58 +96,78 @@ def transcribe_audio(content, language, input_format='webm'):
     return result
 
 
-def generate_response(new_message, conversation_id, user_id, language="English"):
+def generate_response(new_message, conversation_id, user_id, language="English", memory_manager: MemoryManager = None):
     logger.info(f"Generating response for user {user_id}, conversation {conversation_id}")
     logger.debug(f"New message: {new_message}")
     logger.debug(f"Language: {language}")
-    logger.debug(f"Using MemoryManager instance ID: {id(memory_manager)}")
 
-    system_prompt = load_system_prompt(language)
-    logger.debug(f"System prompt: {system_prompt}")
+    if memory_manager is None:
+        raise ValueError("MemoryManager is required")
 
-    # Retrieve all relevant messages within the current window
-    window_messages = memory_manager.get_conversation_window(conversation_id, user_id)
-    logger.debug(f"Retrieved {len(window_messages)} messages from the conversation window")
-    
-    # Add the new message to the conversation window
-    user_message_id = memory_manager.add_message_to_store(new_message, conversation_id, user_id, is_user_message=True)
-    logger.debug(f"Added new user message with ID: {user_message_id}")
+    try:
+        # Check if the conversation exists, if not create it
+        conversation = memory_manager.db.query(Conversation).filter(Conversation.id == conversation_id).first()
+        if not conversation:
+            user = memory_manager.db.query(User).filter(User.id == user_id).first()
+            if not user:
+                user = User(id=user_id, username=f"user_{user_id}")
+                memory_manager.db.add(user)
+            
+            conversation = Conversation(id=conversation_id, user_id=user_id, language=language)
+            memory_manager.db.add(conversation)
+            memory_manager.db.commit()
+            logger.info(f"Created new conversation with id {conversation_id} for user {user_id}")
 
-    # Manage conversation window (store new message, summarize old ones if necessary)
-    memory_manager.manage_conversation_window(conversation_id, user_id)
-    logger.debug("Conversation window managed")
+        system_prompt = load_system_prompt(language)
+        logger.debug(f"System prompt: {system_prompt}")
 
-    # Prepare context with proper classification and timestamps
-    context = []
-    for msg in window_messages:
-        timestamp = msg['timestamp']
-        if msg['is_summary']:
-            context.append(f"Summary ({msg['summary_start_time']} to {msg['summary_end_time']}): {msg['content']}")
-        elif msg['is_user_message']:
-            context.append(f"User ({timestamp}): {msg['content']}")
-        else:
-            context.append(f"AI ({timestamp}): {msg['content']}")
-    
-    # Add the new user message with its timestamp
-    new_message_timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    context.append(f"User ({new_message_timestamp}): {new_message}")
-    
-    context_str = "\n".join(context)
-    logger.debug(f"Context prepared for response generation: {context_str}")
+        # Retrieve all relevant messages within the current window
+        window_messages = memory_manager.get_conversation_window(conversation_id, user_id)
+        logger.debug(f"Retrieved {len(window_messages)} messages from the conversation window")
+        
+        # Add the new message to the conversation window
+        user_message_id = memory_manager.add_message_to_store(new_message, conversation_id, user_id, is_user_message=True)
+        logger.debug(f"Added new user message with ID: {user_message_id}")
 
-    # Log the first few messages of the context for debugging
-    logger.debug(f"First few context messages: {context[:3]}")
+        # Manage conversation window (store new message, summarize old ones if necessary)
+        memory_manager.manage_conversation_window(conversation_id, user_id)
+        logger.debug("Conversation window managed")
 
-    logger.info("Calling LLama for response generation")
-    response = llama(system_prompt=system_prompt, prompt=f"Context:\n{context_str}\nAI:")
-    # Clean the response if necessary
-    response = response.strip()
-    logger.info(f"Response generated: {response}")
+        # Prepare context with proper classification and timestamps
+        context = []
+        for msg in window_messages:
+            timestamp = msg.timestamp
+            if msg.is_summary:
+                context.append(f"Summary ({msg.summary_start_time} to {msg.summary_end_time}): {msg.content}")
+            elif msg.is_user_message:
+                context.append(f"User ({timestamp}): {msg.content}")
+            else:
+                context.append(f"AI ({timestamp}): {msg.content}")
+        
+        # Add the new user message with its timestamp
+        new_message_timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        context.append(f"User ({new_message_timestamp}): {new_message}")
+        
+        context_str = "\n".join(context)
+        logger.debug(f"Context prepared for response generation: {context_str}")
 
-    # Store the generated response in the memory manager
-    ai_message_id = memory_manager.add_message_to_store(response, conversation_id, user_id, is_user_message=False)
-    logger.debug(f"Added AI response with ID: {ai_message_id}")
-    return response
+        logger.info("Calling LLama for response generation")
+        response = llama(system_prompt=system_prompt, prompt=f"Context:\n{context_str}\nAI:")
+        # Clean the response if necessary
+        response = response.strip()
+        logger.info(f"Response generated: {response}")
+
+        # Store the generated response in the memory manager
+        ai_message_id = memory_manager.add_message_to_store(response, conversation_id, user_id, is_user_message=False)
+        logger.debug(f"Added AI response with ID: {ai_message_id}")
+        return response
+
+    except SQLAlchemyError as e:
+        logger.error(f"Database error occurred: {str(e)}")
+        raise
+    except Exception as e:
+        logger.error(f"An error occurred during response generation: {str(e)}")
+        raise
 
 
 def speak_text(text, language):

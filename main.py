@@ -1,7 +1,7 @@
 import logging
 import warnings
 import os
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Depends
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,6 +25,7 @@ from logging.handlers import RotatingFileHandler
 from sqlalchemy.orm import Session
 from datetime import datetime
 from memory_manager import MemoryManager
+from models import SessionLocal, get_db
 
 # Initialize the conversation handler
 
@@ -73,6 +74,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+db = next(get_db())
+memory_manager = MemoryManager(db=db)
+logger.info("MemoryManager initialized")
+
 # Dependency to get DB session
 def get_db():
     db = SessionLocal()
@@ -80,8 +85,6 @@ def get_db():
         yield db
     finally:
         db.close()
-
-memory_manager = MemoryManager(window_size=10)
 
 # Exception Handlers
 @app.exception_handler(RequestValidationError)
@@ -164,21 +167,31 @@ async def get_available_voices():
 
 
 @app.post("/generate")
-async def generate_chatbot_response(request: GenerateRequest):
+async def generate_chatbot_response(request: GenerateRequest, db: Session = Depends(get_db)):
     logger.info(f"Received generate request for user {request.user_id}, conversation {request.conversation_id}")
     try:
+        # Set the current database session for the MemoryManager
+        memory_manager.set_db(db)
+        
         # Generate the response from the chatbot
         chatbot_response = generate_response(
             request.message, 
             request.conversation_id, 
             request.user_id, 
-            request.language
+            request.language,
+            memory_manager
         )
         logger.info("Response generated successfully")
         return {"response": chatbot_response}
+    except ValueError as ve:
+        logger.error(f"Value error occurred: {str(ve)}")
+        raise HTTPException(status_code=400, detail=str(ve))
+    except SQLAlchemyError as se:
+        logger.error(f"Database error occurred: {str(se)}")
+        raise HTTPException(status_code=500, detail="A database error occurred")
     except Exception as e:
-        logger.error(f"An error occurred during response generation: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"An unexpected error occurred during response generation: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="An unexpected error occurred")
 
 
     
